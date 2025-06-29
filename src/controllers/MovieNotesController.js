@@ -4,33 +4,33 @@ const AppError = require("../utils/AppError");
 class MovieNoteConroller {
   async create(request, response) {
     const { title, description, rating, movie_tags } = request.body;
-    const { user_id } = request.params;
-
-    if (!rating || rating < 1 || rating > 5) {
+    const user_id = request.user.id;
+    
+    if ((rating === null || rating === undefined) || rating < 0 || rating > 5) {
       throw new AppError(
-        "É necessário inserir um número que represente uma avaliação válida! Por favor selecione um valor na escala de 1 a 5."
+        "É necessário inserir um número que represente uma avaliação válida! Por favor selecione um valor na escala de 1 a 5.", 400
       );
     }
-
+    
     const [note_id] = await knex("movieNotes").insert({
       title,
       description,
       rating,
       user_id,
     });
-
+    
     if (movie_tags && movie_tags.length) {
       const tagsInsert = movie_tags.map((tag) => {
         return {
           note_id,
           user_id,
-          name: tag.name,
+          name: tag,
         };
       });
-
+      
       await knex("movieTags").insert(tagsInsert);
     }
-
+    
     return response.status(201).json();
   }
 
@@ -42,7 +42,6 @@ class MovieNoteConroller {
 
   async show(request, response) {
     const { id } = request.params;
-
     const note = await knex("movieNotes").where({ id }).first();
     const tags = await knex("movieTags").where({ note_id: id }).orderBy("name");
 
@@ -53,7 +52,9 @@ class MovieNoteConroller {
   }
 
   async index(request, response) {
-    const { title, rating, tags, user_id } = request.query;
+    const { title, rating, tags } = request.query;
+    const user_id = request.user.id;
+    
     let movieNotes = null;
 
     if (tags) {
@@ -72,10 +73,15 @@ class MovieNoteConroller {
         .whereIn("name", filteredTags)
         .innerJoin("movieNotes", "movieNotes.id", "movieTags.note_id")
         .orderBy("movieNotes.title");
+    } else if(title) {
+      movieNotes = await knex("movieNotes")
+        .where({ user_id })
+        .whereLike("title", `%${title}%`)
+        .orderBy("title");
     } else {
       movieNotes = await knex("movieNotes")
-        .where({ user_id, rating })
-        .whereLike("title", `%${title}%`)
+        .select("*")
+        .where({ user_id })
         .orderBy("title");
     }
 
